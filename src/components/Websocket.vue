@@ -1,8 +1,8 @@
 <template>
   <div>
-    <p v-for="item in messages">
+    <!-- <p v-for="item in messages">
       {{ item }}
-    </p>
+    </p> -->
     <div  ref="xterm" class="xtermStyle"></div>
   </div>
 </template>
