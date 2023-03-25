@@ -1,11 +1,3 @@
-// import { defineConfig } from 'vite'
-// import vue from '@vitejs/plugin-vue'
-
-// // https://vitejs.dev/config/
-// export default defineConfig({
-//   plugins: [vue()],
-// })
-// 
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
@@ -14,6 +6,7 @@ export default defineConfig({
   plugins: [vue({
     template: {
       compilerOptions: {
+        // treat all tags with a dash as custom elements
         isCustomElement: (tag) => tag.includes('-')
       }
     }
@@ -33,6 +26,8 @@ export default defineConfig({
   },
   build: {
     lib: {
+      // Could also be a dictionary or array of multiple entry points
+      // entry: resolve(__dirname, 'lib/main.js'),
       entry: './src/main.ce.js',//只包裝這個部分
       name: 'CustomElements',
       fileName:(format)=>`custom-elements.${format}.js`

@@ -5,8 +5,8 @@
 </template>
 <style scoped>
   .xtermStyle{
-    width:1024px;
-    height:100%;
+    width:100vw;
+    height:30vh;
     text-align: left;
     padding-left: 10px;
     /* margin-left: 10px; */
@@ -19,6 +19,7 @@
   // import { printTable } from 'console-table-printer';
   import chalk from 'chalk'; 
   // import { AttachAddon } from 'xterm-addon-attach'; 
+  // import { WebLinksAddon } from 'xterm-addon-web-links';
   import { ref, onMounted, watch, /* unMounted */} from 'vue';
   const xterm = ref(null);
   const socket = ref(null);
@@ -30,7 +31,6 @@
   let curr_line = '';
   let currPos = 0;
   const storagedCode = [];
-  
   const defaultTheme = {
     foreground: '#ffffff', // 字体
     background: '#1b212f', // 背景色
@@ -56,15 +56,15 @@
   const term = new Terminal({
     fontSize: 18,
     cursorBlink: true,
-    rows:20,
-    cols:20,
+    rows: 20,
+    cols: 20,
     rendererType: 'canvas',
     // fontWeight:700
     theme: defaultTheme,
   });
   // const attachAddon = new AttachAddon(socket.value);
   term.prompt = () => {
-    term.write('\r\n\u001b[32mcode>\u001b[37m');
+    term.write('\r\n\u001b[32m\u001b[1mcode>\u001b[37m');
     // term.write('\n\r' + curr_line + '\r\n\u001b[32mcode>\u001b[37m')
   };
   const initXterm = ()=>{
@@ -89,11 +89,13 @@
         // const p = new Table();
         // testCases
         // printTable(testCases);
+        term.write('\r\n' + '============================')
         term.write('\r\n' + chalk.red(sendCode))
         for(let i = 0 ; testCases.length > i ; i++){
           term.write(`\r\n${testCases[i].text} ${testCases[i].value}`);
         }
         // term.write(`\r\n\b${sendCode}`);
+        term.write('\r\n' + '============================')
         storagedCode.length = 0;
         term.prompt();
       }else if(e.keyCode === 8){
@@ -111,6 +113,8 @@
   // })
   onMounted(() => {
     socket.value = new WebSocket('ws://localhost:3001');
+    // socket.value = new WebSocket(location.protocol.replace('http','ws') + '//' + location.hostname + ( location.port ? ( ':' + location.port ) : '') + '/');
+    // term.loadAddon(new WebLinksAddon());
     // socket.value.addEventListener('open',()=>{
     //   console.log('open vue connection')
     // })

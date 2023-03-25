@@ -15,7 +15,7 @@ import Websocket from './components/Websocket.vue';
   <Websocket></Websocket>
   <p>other</p>
   <main>
-    <xterm-bdp></xterm-bdp>
+    <xterm-bdp-element></xterm-bdp-element>
   </main>
   
   <!-- <HelloWorld msg="Vite + Vue" /> -->
