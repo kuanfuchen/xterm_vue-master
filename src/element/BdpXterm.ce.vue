@@ -12,13 +12,16 @@
   import { ref, onMounted } from 'vue';
   import { WebLinksAddon } from 'xterm-addon-web-links';
   import {LinkProvider} from 'xterm-link-provider';
+  // import color from 'ansi-colors';
+  // import chalk from 'chalk';
   // import { AttachAddon } from 'xterm-addon-attach'; 
   let inputApis;
   const xterm = ref(null);
-  const userInfo = ref({})
-  const _rows = ref(50)
+  const userInfo = ref({});
+  const _rows = ref(50);
   const onloadElement = defineEmits(['onload']);
-  
+  let tempStorageSiganal = '';
+  let terminalPath = '';
   const bdpElementInterface = {
     bdpInitialize: (inputApi) =>  {
       console.log(inputApi);
@@ -68,42 +71,58 @@
     // lineHeight:1.1,
     theme: defaultTheme,
   });
+  const terminalContent = {
+    projectName: '',
+    projectId: '',
+    resultName: '',
+    resultId: '',
+    fileName:'',
+    fileId: '',
+    recordProject: {},
+  };
+  const displayedText = ()=>{
+    terminalPath = terminalContent.projectName === '' ? '': 'projectName>' + terminalContent.projectName + '>';
+  };
   terminal.prompt = () => {
-    terminal.write('\r\n\u001b[32mcode>\u001b[37m');
+    terminal.write(`\r\n\x1b[28m\u001b[32mcode>${terminalPath}\u001b[37m`);
   };
   const initXterm = ()=>{
     // term.loadAddon(fitAddon);
     // terminal.loadAddon(new WebLinksAddon());
+    // terminal.write(color.green('Welcome to Xtem JS'));
     terminal.write('Welcome to Xtem JS');
     terminal.open(xterm.value);
     terminal.prompt();
     fitAddon.fit();
     terminal.focus();
-    
     terminal.onKey(async(ev)=>{
       const e = ev.domEvent;
-      getSelectAPI();
+      // getSelectAPI();
       if(e.keyCode === 13){
         // terminal.clear();//OK
         // terminal.dispose();//ok，移除DOM
         const sendCode = storagedCode.join('').trim();
-        // socket.value.send(sendCode);
-        // terminal.write('\r\n' + chalk.red(sendCode));
+        // console.log(green('this is string'));
+        // terminal.write('\r\n'+'test color' + red(sendCode));
         // terminal.write('\r\n' + sendCode);
         terminal.clearSelection();
         terminal.clearTextureAtlas();
         storagedCode.length = 0;
-        if(sendCode === 'result'){
-          await getApi(sendCode);
-        }else if(sendCode === 'file'){
-          await getFileAPI(sendCode)
+        if(sendCode.length > 0){
+          const checkedBehavior = sendCode.split(' ');
+          if(checkedBehavior[0] === 'cd'){
+            await textCMDEnterPath(checkedBehavior);
+          }else{
+            await textCMDgetlist(sendCode);
+          }
         }
         // selector();
         // attachCustomKeyEventHandlerAPI();
         terminal.prompt();
-        // terminal.scrollToBottom();
+        terminal.scrollToBottom();
       }else if(e.keyCode === 8){
-        if(terminal._core.buffer.x > 5) terminal.write('\b \b');
+        const len = terminalContent.projectName.length;
+        if(terminal._core.buffer.x > 5 + len ) terminal.write('\b \b');
         const storagedLen = storagedCode.length - 1;
         storagedCode.splice(storagedLen, 1);
       }else{
@@ -112,101 +131,92 @@
       }
     });
   };
-  const getSelectAPI = ()=>{
-    const text = terminal.getSelection();
-    console.log(text,'text')
+  const textCMDEnterPath= async(checkedBehavior) => {
+    checkedBehavior.shift();
+    const splitedPathName = checkedBehavior.join(" ");
+    console.log(splitedPathName, 'splitedPathName');
+    if(splitedPathName === '..'){
+      terminalContent.projectName = '';
+      terminalContent.projectId = '';
+      terminalPath = '';
+      terminalContent.recordProject = {};
+      return
+    }
+    const listProjects = await inputApis.listProjects();
+    const checkedSameProject = [];
+    listProjects.records.forEach((item)=>{if(item.name === splitedPathName) checkedSameProject.push(item)});
+    if(checkedSameProject.length === 1){
+      terminalContent.projectName = checkedSameProject[0].name;
+      terminalContent.projectId = checkedSameProject[0].id;
+      terminalContent.recordProject = checkedSameProject[0];
+      displayedText();
+    }else if(checkedSameProject.length > 1){
+      terminal.write('\r\n' + '\u001b[36mProject name | \u001b[37mCreate time');
+      for(let i = 0 ; checkedSameProject.length > i ; i++){
+        const timeNewStyle = checkedSameProject[i].createdAt.split(' GMT').shift();
+        const regIdName = new RegExp('(' + `${item.name} ${ timeNewStyle} ${item.id}` + ')');
+        getLinkId(regIdName, 'openProject')
+        terminal.write('\r\n' + `\u001b[36m${checkedSameProject[i].name} \u001b[37m${timeNewStyle} \x1b[8m${checkedSameProject[i].id}\x1b[28m`);
+      }
+    }else{
+      terminal.write(`\r\n don't ProjectName`)
+    }
   }
+  const textCMDgetlist = async(sendCode)=>{
+    const splitText = sendCode.split('-');
+    switch(splitText[0].trim()){
+      case 'ls result':
+        terminal.write('\r\n' + `\u001b[37m${sendCode}`);
+        await getListResultOrFileAPI('results');
+        break;
+      case 'ls datafile':
+        terminal.write('\r\n' + `\u001b[37m${sendCode}`);
+        await getListResultOrFileAPI('dataFiles');
+        break;
+      case 'ls project':
+        if(splitText.length > 1){
+          const projectOptions = splitText[splitText.length - 1];
+          if(projectOptions === 'public' || projectOptions === 'share'){
+            await getListProjectAPI(projectOptions)
+          }else{
+            terminal.write('\r\nNo data!');
+            return
+          }
+        }else{
+          terminal.write(`\r\n\u001b[37m${sendCode}`);
+          await getListProjectAPI('default');
+        }
+        break;
+      case 'ls package':
+        terminal.write(`\r\n\u001b[37m${sendCode}`);
+        await getListResultOrFileAPI('packages');
+        break;
+      default:
+        terminal.write(`\r\n\u001b[33mDon't correct signal, please`);
+    }
+  };
+  
+  const getListProjectAPI = async(projectOptions)=>{
+    const listProjects = await inputApis.listProjects(null,null,projectOptions);
+    console.log(listProjects, 'listProjects');
+    terminal.write('\r\n' + `\u001b[36mProject count \u001b[36m${ listProjects.totalCount }`);
+    terminal.write('\r\n' + '\u001b[36mProject name | \u001b[37mCreate time');
+    for(let i = 0 ; listProjects.records.length > i ; i++){
+      const timeNewStyle = listProjects.records[i].createdAt.split(' GMT').shift();
+      terminal.write('\r\n' + `\u001b[36m${listProjects.records[i].name} \u001b[37m${ timeNewStyle } \x1b[8m${listProjects.records[i].id}\x1b[28m`);
+      const regIdName = new RegExp('(' + `${listProjects.records[i].name} ${ timeNewStyle } ${listProjects.records[i].id}` + ')');
+      getLinkId(regIdName, 'openProject')
+    }
+  }
+  // const getSelectAPI = ()=>{
+  //   const text = terminal.getSelection();
+  //   console.log(text,'text')
+  // }
   const attachCustomKeyEventHandlerAPI = ()=>{
     terminal.attachCustomKeyEventHandler((ev)=> {
       console.log(ev, 'ev')
     })
   }
-  const getFileAPI = (async(inputedCode)=>{
-    const listProjects = await inputApis.listProjects();
-    terminal.write('\r\n' + `\u001b[33mProject count \u001b[33m${ listProjects.totalCount }`);
-    terminal.write('\r\n' + '\u001b[33mFile name \u001b[33mCreate time');
-    for(let i = 0 ; listProjects.records.length > i ; i++){
-      if(listProjects.records[i].dataFiles.length > 0){
-        terminal.write('\r\n' + `\u001b[33mProject name \u001b[36m${listProjects.records[i].name}`);
-        listProjects.records[i].dataFiles.forEach((file) => {
-          terminal.write('\r\n' + `\u001b[36m${file.name}  \u001b[36m${file.createdAt}`);
-          // terminal.onSelectionChange(()=>console.log(file.id,file.name))
-        })
-        _rows.value = _rows.value + listProjects.records[i].dataFiles.length + 4;
-      }else{
-        terminal.write('\r\nNo Data');
-      }
-    }
-  })
-  const getApi = async(inputedCode)=>{
-    const listProjects = await inputApis.listProjects();
-    console.log(listProjects, 'listProjects')
-    terminal.write('\r\n' + `\u001b[33mProject count \u001b[33m${ listProjects.totalCount }`);
-    terminal.write('\r\n' + '\u001b[33mResult name \u001b[33mCreate time');
-    // const emojiRegex = /(\p{Emoji_Presentation}+)/gu
-    // const emojiRegex = /(CLICKME)/gu
-    // terminal.registerLinkProvider(
-    //   new LinkProvider(
-    //     terminal,
-    //     emojiRegex,
-    //     (e, text) => {
-    //       console.log(text)
-    //     }
-    //   )
-    // )
-    // terminal.write('\r\n' + 'click here: CLICKME')
-    // const list = [];
-    // for(let i = 0 ; listProjects.records.length > i ; i++){
-    //   listProjects.records[i].results.forEach((result)=>{
-    //     list.push(result)
-    //   })
-    // };
-    // for(let i = 0 ; list.length > i ; i++){
-    //   console.log(list[i])
-    //   terminal.writeln('\r\n' + `\u001b[33m${list[i].name} \u001b[36m${list[i].createdAt}`);
-    // }
-    for(let i = 0 ; listProjects.records.length > i ; i++){
-      if(listProjects.records[i].results.length > 0){
-        terminal.write('\r\n' + `\u001b[33mProject name \u001b[36m${listProjects.records[i].name}`);
-        // terminal.write
-        listProjects.records[i].results.forEach((result) => {
-          // let resultName = /(result.name)/gu;
-          const newReg = new RegExp('(' + result.id + ')')
-          // console.log(newReg, 'newReg')
-          // terminal.write('\r\n' + `\u001b[36m${result.name}  \u001b[36m${result.createdAt}`);
-          terminal.registerLinkProvider(
-            new LinkProvider(
-              terminal,
-              newReg,
-              (e, text)=>{
-                // const txt = terminal.getSelection();
-                // console.log(txt)
-                // const pos = terminal.getSelectionPosition(($event)=>console.log($event));
-                // console.log(pos,'pos')
-                console.log(e.target,text)
-              }
-            )
-          )
-          terminal.write('\r\n' + `\u001b[36m${result.name}  \u001b[36m${result.id}`);
-          // terminal.onSelectionChange(() => console.log(result.id, result.name))
-          // terminal.registerCharacterJoiner((ev)=>{
-          //   console.log(ev,'ev')
-          // })
-        //   const hookText = terminal.parser.registerCsiHandler({final:'H'}, params =>{
-        //     console.log(result.createdAt)
-        //   })
-        //   hookText.dispose();
-          // terminal.onBell(()=>{console.log(i,'i')})
-          // selectResult(result);
-        })
-        // terminal.resize((cols, rows) => {console.log(cols, rows)});
-        _rows.value = _rows.value + listProjects.records[i].results.length + 4;
-        // console.log(_rows.value, 'row')
-        // terminal.registerMarker((ev)=>console.log(ev))
-      }else{
-        terminal.write('\r\nNo Data');
-      }
-    }
     // const packageList = await inputApis.listPackages();
     // console.log(packageList, 'packageList')
     // const resultList = await inputApis.listResults();
@@ -216,18 +226,61 @@
     /* error: listPackages() listResults() */
     // const resultInfo = await inputApis.getResultInfo();
     // console.log(resultInfo,'resultInfo')
+  const getListResultOrFileAPI = async(type)=>{
+    const projectObj = Object.keys(terminalContent.recordProject);
+    console.log(terminalContent.recordProject)
+    if(projectObj.length === 0) {
+      terminal.write('\r\n' + `Don't select project`);
+      return 
+    };
+    console.log(terminalContent, 'terminalContent')
+    //dataFiles//results
+    if(terminalContent.recordProject[type].length === 0){
+      terminal.write('\r\n' + `${type} no data`);
+      return
+    }
+    terminal.write(`\r\n\u001b[36m${type} | \u001b[37m Create Time`)
+    terminalContent.recordProject[type].forEach((item)=>{
+      const timeNewStyle = item.createdAt.split(' GMT').shift();
+      const regIdName = new RegExp('(' + `${item.name} ${ timeNewStyle} ${item.id}` + ')');
+      getLinkId(regIdName, type);
+      terminal.write('\r\n' + `\x1b[28m\u001b[36m${item.name} \u001b[37m${timeNewStyle} \x1b[8m${item.id}`);
+    })
   }
-  const selectResult = (result)=>{
-    terminal.onSelectionChange(()=>console.log(result.id,result.name))
-    // const resultObj  = terminal.onSelectionChange(()=>{
-
-    //   return {
-    //     name:result.name,
-    //     id:result.id
-    //   }
-    // })
-    // console.log(resultObj, 'resultObj')
+  const savedProject = async() => {
+    const listProjects = await inputApis.listProjects();
+    listProjects.records.forEach((record)=>{
+      if(terminalContent.projectId === record.id) terminalContent.recordProject = record;
+    })
   }
+  const getLinkId = (regIdName, option)=>{
+    terminal.registerLinkProvider(
+      new LinkProvider(
+        terminal,
+        regIdName,
+        async(e, idName)=>{
+          const splitTxt = idName.split(' ');
+          const id = splitTxt[splitTxt.length - 1];
+          const name = splitTxt[0];
+          // await inputApis.navigateToBdpResult(id);
+          if(option === 'results'){
+            await inputApis.openResultLink(id);
+          }else if(option === 'dataFiles'){
+            await inputApis.openFileLink(id)
+          }else if(option === 'openProject'){
+            terminalContent.projectName = name;
+            terminalContent.projectId = id;
+            displayedText();
+            terminal.prompt();
+            savedProject();
+          }        
+        }
+      )
+    )
+  }
+  // const selectResult = (result)=>{
+  //   terminal.onSelectionChange(()=> console.log(result.id,result.name));
+  // }
   // const selector = ()=>{
   //   terminal.select((col) => console.log(col))
   // }
@@ -235,13 +288,8 @@
     userInfo.value = await inputApis.getCurrentUserInfo();
   }
   onMounted(() => {
-    // socket.value = new WebSocket('ws://localhost:3001');
     onloadElement('onload', bdpElementInterface);
-    // socket.value = new WebSocket(location.protocol.replace('https','ws') + '//' + location.hostname + ( location.port ? ( ':' + /* location.port */ 3001) : '') + '/');
-    // const attAddon = new AttachAddon(socket.value);
-    // term.loadAddon(attAddon);
     initXterm();
-    
     // attachCustomKeyEventHandlerAPI();
   })
 </script>
