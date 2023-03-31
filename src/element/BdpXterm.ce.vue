@@ -20,7 +20,6 @@
   const userInfo = ref({});
   const _rows = ref(50);
   const onloadElement = defineEmits(['onload']);
-  let tempStorageSiganal = '';
   let terminalPath = '';
   const bdpElementInterface = {
     bdpInitialize: (inputApi) =>  {
@@ -80,8 +79,14 @@
     fileId: '',
     recordProject: {},
   };
-  const displayedText = ()=>{
-    terminalPath = terminalContent.projectName === '' ? '': 'projectName>' + terminalContent.projectName + '>';
+  const displayedText = (type)=>{
+    if(type === 'project')
+    terminalPath = terminalContent.projectName === '' ? '': 'ProjectName>' + terminalContent.projectName + '>'; 
+    if(type === 'result'){
+      terminalPath += `ResultName>${terminalContent.resultName}>`;
+    }else if(type === 'datafile'){
+      terminalPath += `FileName>${terminalContent.fileName}>`;
+    }
   };
   terminal.prompt = () => {
     terminal.write(`\r\n\x1b[28m\u001b[32mcode>${terminalPath}\u001b[37m`);
@@ -111,7 +116,11 @@
         if(sendCode.length > 0){
           const checkedBehavior = sendCode.split(' ');
           if(checkedBehavior[0] === 'cd'){
-            await textCMDEnterPath(checkedBehavior);
+            if(terminalContent.projectId === ''){
+              await textCMDEnterPath(checkedBehavior, 'project');
+            }else{
+              await textCMDEnterPath(checkedBehavior);
+            }
           }else{
             await textCMDgetlist(sendCode);
           }
@@ -131,37 +140,94 @@
       }
     });
   };
-  const textCMDEnterPath= async(checkedBehavior) => {
+  const textCMDEnterPath= async(checkedBehavior, dataType) => {
     checkedBehavior.shift();
     const splitedPathName = checkedBehavior.join(" ");
     console.log(splitedPathName, 'splitedPathName');
     if(splitedPathName === '..'){
-      terminalContent.projectName = '';
-      terminalContent.projectId = '';
-      terminalPath = '';
-      terminalContent.recordProject = {};
+      if(terminalContent.resultId === '' && terminalContent.fileId === ''){
+        terminalContent.projectName = '';
+        terminalContent.projectId = '';
+        terminalPath = '';
+        terminalContent.recordProject = {};
+        displayedText('project');
+        console.log(terminalPath, 'terminalPath')
+      }else{
+        terminalContent.resultName = '';
+        terminalContent.resultId = '';
+        terminalContent.fileName = '';
+        terminalContent.fileId = '';
+        displayedText('project');
+        terminal.prompt();
+      }
       return
     }
-    const listProjects = await inputApis.listProjects();
-    const checkedSameProject = [];
-    listProjects.records.forEach((item)=>{if(item.name === splitedPathName) checkedSameProject.push(item)});
-    if(checkedSameProject.length === 1){
-      terminalContent.projectName = checkedSameProject[0].name;
-      terminalContent.projectId = checkedSameProject[0].id;
-      terminalContent.recordProject = checkedSameProject[0];
-      displayedText();
-    }else if(checkedSameProject.length > 1){
-      terminal.write('\r\n' + '\u001b[36mProject name | \u001b[37mCreate time');
-      for(let i = 0 ; checkedSameProject.length > i ; i++){
-        const timeNewStyle = checkedSameProject[i].createdAt.split(' GMT').shift();
-        const regIdName = new RegExp('(' + `${item.name} ${ timeNewStyle} ${item.id}` + ')');
-        getLinkId(regIdName, 'openProject')
-        terminal.write('\r\n' + `\u001b[36m${checkedSameProject[i].name} \u001b[37m${timeNewStyle} \x1b[8m${checkedSameProject[i].id}\x1b[28m`);
+    if(dataType === 'project'){
+      const listProjects = await inputApis.listProjects();
+      const checkedSameProject = [];
+      listProjects.records.forEach((item)=>{if(item.name === splitedPathName) checkedSameProject.push(item)});
+      if(checkedSameProject.length === 1){
+        terminalContent.projectName = checkedSameProject[0].name;
+        terminalContent.projectId = checkedSameProject[0].id;
+        terminalContent.recordProject = checkedSameProject[0];
+        displayedText('project');
+      }else if(checkedSameProject.length > 1){
+        terminal.write('\r\n' + '\u001b[36mProject name | \u001b[37mCreate time');
+        for(let i = 0 ; checkedSameProject.length > i ; i++){
+          const timeNewStyle = checkedSameProject[i].createdAt.split(' GMT').shift();
+          const regIdName = new RegExp('(' + `${checkedSameProject[i].name} ${ timeNewStyle} ${checkedSameProject[i].id}` + ')');
+          getLinkId(regIdName, 'openProject')
+          terminal.write('\r\n' + `\u001b[36m${checkedSameProject[i].name} \u001b[37m${timeNewStyle} \x1b[8m${checkedSameProject[i].id}\x1b[28m`);
+        }
+      }else{
+        terminal.write(`\r\n don't ProjectName`)
       }
     }else{
-      terminal.write(`\r\n don't ProjectName`)
+      terminalContent.resultName = '';
+      terminalContent.resultId = '';
+      terminalContent.fileName = '';
+      terminalContent.fileId = '';
+      console.log(terminalContent.recordProject,'record')
+      if(terminalContent.recordProject === '' || terminalContent.recordProject.dataFiles.length === 0 && terminalContent.recordProject.results.length === 0) return;
+      const resultAndFileList = {
+        resultList:[],
+        fileList:[],
+      };
+      terminalContent.recordProject.dataFiles.forEach((item)=>{if(item.name === splitedPathName)resultAndFileList.fileList.push(item)});
+      terminalContent.recordProject.results.forEach((item)=>{if(item.name === splitedPathName)resultAndFileList.resultList.push(item)});
+      const listLen = resultAndFileList.resultList.length + resultAndFileList.fileList.length;
+      if(listLen === 1 && resultAndFileList.resultList.length === 1){
+        terminalContent.resultId = resultAndFileList.resultList[0].id;
+        terminalContent.resultName = resultAndFileList.resultList[0].name;
+        displayedText('result');
+      }else if(listLen === 1 && resultAndFileList.fileList.length === 1){
+        terminalContent.fileName = resultAndFileList.fileList[0].name;
+        terminalContent.fileId = resultAndFileList.fileList[0].id;
+        displayedText('datafile');
+      }else{
+        if(resultAndFileList.resultList.length > 1){
+          terminal.write('\r\n' + '\u001b[36mResult name | \u001b[37mCreate time');
+          for(let i = 0 ; resultAndFileList.resultList.length > i ; i++){
+            const timeNewStyle = resultAndFileList.resultList[i].createdAt.split(' GMT').shift();
+            const regIdName = new RegExp('(' + `${resultAndFileList.resultList[i].name} ${ timeNewStyle} ${resultAndFileList.resultList[i].id}` + ')');
+            getLinkId(regIdName, 'results');
+            terminal.write('\r\n' + `\u001b[36m${resultAndFileList.resultList[i].name} \u001b[37m${timeNewStyle} \x1b[8m${resultAndFileList.resultList[i].id}\x1b[28m`);
+          }
+        }else if(resultAndFileList.fileList.length > 1){
+          terminal.write('\r\n' + '\u001b[36mFile name | \u001b[37mCreate time');
+          for(let i = 0 ; resultAndFileList.fileList.length > i ; i++){
+            const timeNewStyle = resultAndFileList.fileList[i].createdAt.split(' GMT').shift();
+            const regIdName = new RegExp('(' + `${resultAndFileList.fileList[i].name} ${ timeNewStyle} ${resultAndFileList.fileList[i].id}` + ')');
+            getLinkId(regIdName, 'dataFiles')
+            terminal.write('\r\n' + `\u001b[36m${resultAndFileList.fileList[i].name} \u001b[37m${timeNewStyle} \x1b[8m${resultAndFileList.fileList[i].id}\x1b[28m`);
+          }
+        }
+        
+      }
+
     }
   }
+
   const textCMDgetlist = async(sendCode)=>{
     const splitText = sendCode.split('-');
     switch(splitText[0].trim()){
@@ -264,13 +330,15 @@
           const name = splitTxt[0];
           // await inputApis.navigateToBdpResult(id);
           if(option === 'results'){
-            await inputApis.openResultLink(id);
+            console.log(name, id, option);
+            // await inputApis.openResultLink(id);
           }else if(option === 'dataFiles'){
-            await inputApis.openFileLink(id)
+            console.log(name, id, option);
+            // await inputApis.openFileLink(id)
           }else if(option === 'openProject'){
             terminalContent.projectName = name;
             terminalContent.projectId = id;
-            displayedText();
+            displayedText('project');
             terminal.prompt();
             savedProject();
           }        
