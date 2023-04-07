@@ -77,6 +77,7 @@
   const terminalContent = {
     projectName: '',
     projectId: '',
+    projectOption: 'default',
     resultName: '',
     resultId: '',
     fileName:'',
@@ -124,7 +125,7 @@
         await terminal.scrollToBottom();
       }else if(e.keyCode === 8){
         const textLen =  pathwayTextLen.projectNameLen + pathwayTextLen.resultAndFileLen;
-        if(terminal._core.buffer.x > 6 + textLen ) terminal.write('\b \b');
+        if(terminal._core.buffer.x > 5 + textLen ) terminal.write('\b \b');
         const storagedLen = storagedCode.length - 1;
         storagedCode.splice(storagedLen, 1);
       }else{
@@ -160,23 +161,51 @@
         break;
       case 'view':
         if(checkedBehavior.length < 2 )return terminal.write('\r\nEnter id || name');
-        if(terminalContent.fileId !== ''){
-          for(let i = 0 ; terminalContent.recordProject.dataFiles.length > i ; i++){
-            if(checkedBehavior[1] === terminalContent.recordProject.dataFiles[i].id || terminalContent.recordProject.dataFiles[i].name === checkedBehavior[1]){
-              terminal.write(`\r\nDataFile information\r\nName  ${terminalContent.recordProject.dataFiles[i].name}\r\nFormat ${Folder}`)
-            }
-          }
-        }
+        checkedBehavior.shift();
+        writedTableInfo(checkedBehavior)
         break;
       default:
         await textCMDgetlist(sendCode);
         break;
     }
+  };
+  const writedTableInfo = (checkedBehavior)=>{
+    const checkedInfoType = checkedBehavior.shift();
+    let type = '';
+    //type: datafile result,
+    if(checkedInfoType === 'datafile'){
+      type = 'dataFiles'
+    }else if(checkedInfoType === 'result'){
+      type = 'results'
+    }else{
+      return terminal.write('\r\n\u001b[33mDatatype wrong');
+    }
+    const recombinedRecord = checkedBehavior.join(" ").trim();
+    console.log(recombinedRecord, 'recombinedRecord')
+    const project = terminalContent.recordProject;
+    for(let i = 0 ; project.dataFiles.length > i ; i++){
+      if(recombinedRecord === project[type][i].id || project[type][i].name === recombinedRecord){
+        terminal.write(
+          `\r\n\u001b[33m${type} information`+
+          `\r\n\u001b[37mName           ${project[type][i].name}\r\nDescription    ${project[type][i].desc}`+
+          `\r\nOwner          ${project[type][i].owner.name}\r\nCreation Time  ${project[type][i].createdAt}`+
+          `\r\nProject Name   ${terminalContent.projectName}`);
+        if(type === 'dataFiles'){
+          terminal.write(`\r\nFormat         ${project[type][i].format}`+
+          `\r\nServer Path    ${project[type][i].path}` + '\r\nTag            ');
+          for(let j = 0 ; project[type][i].tags.length > j ; j++){
+            terminal.write(`${project[type][i].tags[j]}  `)
+          }
+        }else if(type === 'results'){
+          terminal.write(`\r\nTask Name      ${project[type][i].task.name}\r\nTask Description ${project[type][i].task.desc}` +
+          ``)
+        }
+      }
+    }
   }
   const textCMDEnterPath= async(checkedBehavior, dataType) => {
     checkedBehavior.shift();
-    const splitedPathName = checkedBehavior.join(" ");
-    console.log(splitedPathName, 'splitedPathName');
+    let splitedPathName = checkedBehavior.join(" ");
     if(splitedPathName === '..'){
       if(terminalContent.resultId === '' && terminalContent.fileId === ''){
         terminalContent.projectName = '';
@@ -198,7 +227,18 @@
       return
     }
     if(dataType === 'project'){
-      const listProjects = await inputApis.listProjects();
+      const checkedProjectOption = splitedPathName.split('-');
+      const projectOption = checkedProjectOption[checkedProjectOption.length - 1].trim();
+      if(projectOption === 'public' && checkedProjectOption.length > 1 || projectOption === 'share' && checkedProjectOption.length > 1){
+        terminalContent.projectOption = projectOption;
+        checkedProjectOption.pop();
+        splitedPathName = checkedProjectOption.join(" ").trim();
+        console.log(terminalContent.projectOption)
+      }else{
+        terminalContent.projectOption = 'default';
+      }
+      
+      const listProjects = await inputApis.listProjects(null, null, terminalContent.projectOption);
       const checkedSameProject = [];
       listProjects.records.forEach((item)=>{if(item.name === splitedPathName) checkedSameProject.push(item)});
       if(checkedSameProject.length === 1){
@@ -235,12 +275,12 @@
       if(listLen === 1 && resultAndFileList.resultList.length === 1){
         terminalContent.resultId = resultAndFileList.resultList[0].id;
         terminalContent.resultName = resultAndFileList.resultList[0].name;
-        pathwayTextLen.resultAndFileLen = 'resultname'.length + terminalContent.resultName.length + 1;
+        pathwayTextLen.resultAndFileLen = 'resultname'.length + terminalContent.resultName.length;
         displayedText('result');
       }else if(listLen === 1 && resultAndFileList.fileList.length === 1){
         terminalContent.fileName = resultAndFileList.fileList[0].name;
         terminalContent.fileId = resultAndFileList.fileList[0].id;
-        pathwayTextLen.resultAndFileLen = 'datafile'.length + terminalContent.fileName.length + 1;
+        pathwayTextLen.resultAndFileLen = 'datafile'.length + terminalContent.fileName.length;
         displayedText('datafile');
       }else{
         if(resultAndFileList.resultList.length > 1){
@@ -264,9 +304,6 @@
 
     }
   }
-  const viewFileInfo = (type, typeID)=>{
-    
-  }
   const textCMDgetlist = async(sendCode)=>{
     const splitText = sendCode.split('-');
     switch(splitText[0].trim()){
@@ -280,16 +317,20 @@
         break;
       case 'ls project':
         if(splitText.length > 1){
-          const projectOptions = splitText[splitText.length - 1];
+          const projectOptions = splitText.pop()
+          console.log(projectOptions)
+          // splitText[splitText.length - 1];
           if(projectOptions === 'public' || projectOptions === 'share'){
-            await getListProjectAPI(projectOptions)
+            terminalContent.projectOption = projectOptions;
+            await getListProjectAPI(terminalContent.projectOption)
           }else{
             terminal.write('\r\nNo data!');
             return
           }
         }else{
+          terminalContent.projectOption = 'default';
           terminal.write(`\r\n\u001b[37m${sendCode}`);
-          await getListProjectAPI('default');
+          await getListProjectAPI(terminalContent.projectOption);
         }
         break;
       case 'ls package':
@@ -302,7 +343,7 @@
   };
   
   const getListProjectAPI = async(projectOptions)=>{
-    const listProjects = await inputApis.listProjects(null,null,projectOptions);
+    const listProjects = await inputApis.listProjects(null, null, projectOptions);
     console.log(listProjects, 'listProjects');
     terminal.write('\r\n' + `\u001b[93mProject count \u001b[37m| ${ listProjects.totalCount }`);
     terminal.write('\r\n' + '\u001b[93mProject name \u001b[37m| Create time');
@@ -353,10 +394,11 @@
     })
   }
   const savedProject = async() => {
-    const listProjects = await inputApis.listProjects();
+    const listProjects = await inputApis.listProjects(null, null, terminalContent.projectOption);
     listProjects.records.forEach((record)=>{
       if(terminalContent.projectId === record.id) terminalContent.recordProject = record;
     })
+    console.log(terminalContent,'terminalContent')
   }
   const linkProviderGetPath = (regIdName, option)=>{
     terminal.registerLinkProvider(
